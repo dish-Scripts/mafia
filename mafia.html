@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mafia: The Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+        .font-cinzel {
+            font-family: 'Cinzel', serif;
+        }
+        .player-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+        }
+        .player-card.dead {
+            transform: scale(0.95);
+            opacity: 0.5;
+            background-color: #4a4a4a;
+            box-shadow: none;
+        }
+        .player-card.dead .role-icon {
+            filter: grayscale(100%);
+        }
+        .player-card.selectable:not(.dead):hover {
+            transform: translateY(-5px) scale(1.03);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+        }
+        .log-message, .discussion-bubble {
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #modal-backdrop {
+            transition: opacity 0.3s ease-in-out;
+        }
+        #modal-content {
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+        }
+        .discussion-bubble {
+            max-width: 90%;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+
+    <div id="game-container" class="w-full max-w-7xl h-[95vh] flex flex-col hidden">
+        <!-- Header -->
+        <header class="text-center p-4 border-b border-gray-700">
+            <h1 class="text-4xl font-cinzel font-bold">Mafia</h1>
+            <p id="game-phase" class="text-xl text-red-400 font-semibold mt-1">Waiting to Start</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow flex flex-col md:flex-row gap-4 p-4 overflow-hidden">
+            <!-- Player Grid -->
+            <div id="player-grid-container" class="flex-grow md:w-3/4 overflow-y-auto pr-2">
+                 <div id="player-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <!-- Player cards will be injected here -->
+                </div>
+            </div>
+
+            <!-- Info Panel -->
+            <aside class="md:w-1/4 bg-gray-800/50 rounded-lg p-4 flex flex-col h-full overflow-hidden">
+                <div id="your-role-panel" class="text-center border-b border-gray-600 pb-4 mb-4">
+                    <h2 class="text-2xl font-cinzel font-semibold">Your Role</h2>
+                    <div id="role-display" class="mt-2 text-lg font-bold"></div>
+                    <p id="role-description" class="text-sm text-gray-400 mt-1"></p>
+                </div>
+                <div id="discussion-panel" class="mb-4 flex-shrink-0">
+                    <h3 class="text-xl font-cinzel font-semibold mb-2">Town Discussion</h3>
+                    <div id="discussion-log" class="space-y-2 text-sm max-h-48 overflow-y-auto bg-black/20 p-2 rounded-md">
+                        <!-- Discussion bubbles will be injected here -->
+                    </div>
+                </div>
+                <div class="flex-grow overflow-y-auto">
+                    <h3 class="text-xl font-cinzel font-semibold mb-2">Game Log</h3>
+                    <div id="game-log" class="space-y-2 text-sm">
+                        <!-- Log messages will be injected here -->
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="text-center bg-gray-800 p-8 rounded-lg shadow-2xl">
+        <h1 class="text-5xl font-cinzel font-bold mb-4">Mafia: The Game</h1>
+        <p class="text-gray-300 mb-6">A single-player game of deception and deduction.</p>
+        <div class="mb-6">
+            <label for="player-count" class="block mb-2 text-lg">Select Number of Players:</label>
+            <select id="player-count" class="bg-gray-700 text-white p-2 rounded-md w-48 text-center">
+                <option value="6">6 Players</option>
+                <option value="8" selected>8 Players</option>
+                <option value="10">10 Players</option>
+                <option value="12">12 Players</option>
+            </select>
+        </div>
+        <button id="start-game-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-xl font-cinzel transition-transform transform hover:scale-105">
+            Start Game
+        </button>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center hidden z-50 p-4">
+        <div id="modal-content" class="bg-gray-800 rounded-lg shadow-2xl p-8 w-full max-w-md text-center transform scale-95 opacity-0">
+            <h2 id="modal-title" class="text-3xl font-cinzel font-bold mb-4">Modal Title</h2>
+            <p id="modal-text" class="text-gray-300 mb-6">Modal description text.</p>
+            <div id="modal-buttons" class="flex justify-center flex-wrap gap-4">
+                <!-- Buttons will be injected here -->
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    // --- DOM ELEMENTS ---
+    const gameContainer = document.getElementById('game-container');
+    const startScreen = document.getElementById('start-screen');
+    const startGameBtn = document.getElementById('start-game-btn');
+    const playerCountSelect = document.getElementById('player-count');
+    const playerGrid = document.getElementById('player-grid');
+    const gamePhase = document.getElementById('game-phase');
+    const gameLog = document.getElementById('game-log');
+    const discussionLog = document.getElementById('discussion-log');
+    const roleDisplay = document.getElementById('role-display');
+    const roleDescription = document.getElementById('role-description');
+    
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const modalContent = document.getElementById('modal-content');
+    const modalTitle = document.getElementById('modal-title');
+    const modalText = document.getElementById('modal-text');
+    const modalButtons = document.getElementById('modal-buttons');
+
+    // --- GAME STATE ---
+    let players = [];
+    let humanPlayerId = 0;
+    let currentPhase = 'day'; // 'day' or 'night'
+    let dayNumber = 1;
+    let nightActions = {
+        mafiaKill: null,
+        doctorSave: null,
+        investigatorCheck: null
+    };
+    let aiKnowledge = {}; // To store AI's discoveries
+
+    // --- GAME CONFIG ---
+    const ROLES = {
+        MAFIA: 'Mafia',
+        DOCTOR: 'Doctor',
+        INVESTIGATOR: 'Investigator',
+        CITIZEN: 'Citizen'
+    };
+
+    const ROLE_DESCRIPTIONS = {
+        [ROLES.MAFIA]: 'Each night, vote with your fellow Mafia members to kill one player.',
+        [ROLES.DOCTOR]: 'Each night, choose one player to save. You can save yourself.',
+        [ROLES.INVESTIGATOR]: 'Each night, choose one player to investigate and learn their alignment (Mafia or Not Mafia).',
+        [ROLES.CITIZEN]: 'You have no special abilities. Your job is to observe, deduce, and vote to eliminate the Mafia during the day.'
+    };
+    
+    const ROLE_ICONS = {
+        [ROLES.MAFIA]: '🔪',
+        [ROLES.DOCTOR]: '❤️‍🩹',
+        [ROLES.INVESTIGATOR]: '🔎',
+        [ROLES.CITIZEN]: '👤'
+    };
+
+    // --- CORE GAME LOGIC ---
+
+    function initGame() {
+        const playerCount = parseInt(playerCountSelect.value);
+        assignRoles(playerCount);
+        renderPlayers();
+        
+        const humanPlayer = players[humanPlayerId];
+        roleDisplay.textContent = `${ROLE_ICONS[humanPlayer.role]} ${humanPlayer.role}`;
+        roleDescription.textContent = ROLE_DESCRIPTIONS[humanPlayer.role];
+
+        startScreen.classList.add('hidden');
+        gameContainer.classList.remove('hidden');
+        
+        logMessage(`The game begins with ${playerCount} players.`, 'system');
+        logMessage(`You are the ${humanPlayer.role}.`, 'system');
+        
+        // The first day has no night actions, so we go straight to discussion/voting
+        startDayPhase();
+    }
+
+    function assignRoles(playerCount) {
+        let rolesToAssign = [];
+        const mafiaCount = playerCount <= 8 ? 2 : 3; // Adjusted for better balance with discussion
+
+        for (let i = 0; i < mafiaCount; i++) rolesToAssign.push(ROLES.MAFIA);
+        rolesToAssign.push(ROLES.DOCTOR);
+        rolesToAssign.push(ROLES.INVESTIGATOR);
+        while (rolesToAssign.length < playerCount) rolesToAssign.push(ROLES.CITIZEN);
+
+        for (let i = rolesToAssign.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [rolesToAssign[i], rolesToAssign[j]] = [rolesToAssign[j], rolesToAssign[i]];
+        }
+
+        players = rolesToAssign.map((role, index) => ({
+            id: index,
+            name: index === humanPlayerId ? 'You' : `Player ${index + 1}`,
+            role: role,
+            isAlive: true,
+            isHuman: index === humanPlayerId,
+            votes: 0
+        }));
+        
+        players.forEach(p => {
+            if (!p.isHuman) {
+                aiKnowledge[p.id] = { investigated: [] };
+            }
+        });
+    }
+
+    function renderPlayers() {
+        playerGrid.innerHTML = '';
+        players.forEach(player => {
+            const card = document.createElement('div');
+            card.className = `player-card bg-gray-700 rounded-lg p-4 text-center shadow-lg ${player.isAlive ? '' : 'dead'}`;
+            card.dataset.id = player.id;
+            
+            const roleIcon = player.isAlive ? '❓' : ROLE_ICONS[player.role];
+            const yourRoleIcon = player.isHuman ? ROLE_ICONS[player.role] : roleIcon;
+            
+            card.innerHTML = `
+                <div class="role-icon text-4xl mb-2">${yourRoleIcon}</div>
+                <h3 class="font-bold text-lg">${player.name}</h3>
+                <p class="text-sm ${player.isAlive ? 'text-green-400' : 'text-red-400'}">${player.isAlive ? 'Alive' : 'Dead'}</p>
+                <div class="text-xs text-gray-400 mt-2">Votes: ${player.votes}</div>
+            `;
+            playerGrid.appendChild(card);
+        });
+    }
+
+    async function startDayPhase() {
+        currentPhase = 'day';
+        gamePhase.textContent = `Day ${dayNumber}`;
+        logMessage(`--- Day ${dayNumber} ---`, 'phase');
+        discussionLog.innerHTML = '';
+        
+        players.forEach(p => p.votes = 0);
+        
+        if (dayNumber > 1) {
+            const killedPlayerId = nightActions.mafiaKill;
+            const savedPlayerId = nightActions.doctorSave;
+            
+            if (killedPlayerId !== null) {
+                if (killedPlayerId === savedPlayerId) {
+                    logMessage(`Someone was attacked, but the Doctor saved them!`, 'event');
+                } else {
+                    const killedPlayer = players[killedPlayerId];
+                    killedPlayer.isAlive = false;
+                    logMessage(`${killedPlayer.name} was killed. They were a ${killedPlayer.role}.`, 'event');
+                }
+            }
+        } else {
+             logMessage('A new day begins. The town gathers to discuss.', 'info');
+        }
+        
+        renderPlayers();
+        if (checkWinCondition()) return;
+
+        await runDiscussionPhase();
+        
+        logMessage('The discussion is over. Vote to lynch a suspect.', 'info');
+        enableVoting();
+    }
+    
+    async function runDiscussionPhase() {
+        logMessage('The town discussion begins...', 'info');
+        const livingAI = players.filter(p => p.isAlive && !p.isHuman);
+        
+        // Shuffle the order of speakers
+        for (let i = livingAI.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [livingAI[i], livingAI[j]] = [livingAI[j], livingAI[i]];
+        }
+
+        for (const aiPlayer of livingAI) {
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+            const dialogue = generateAIDialogue(aiPlayer);
+            if (dialogue) {
+                logDiscussionMessage(aiPlayer.name, dialogue);
+            }
+        }
+    }
+
+    function generateAIDialogue(aiPlayer) {
+        const livingPlayers = players.filter(p => p.isAlive);
+        const livingOthers = livingPlayers.filter(p => p.id !== aiPlayer.id);
+        
+        switch(aiPlayer.role) {
+            case ROLES.MAFIA: {
+                const nonMafia = livingOthers.filter(p => p.role !== ROLES.MAFIA);
+                if (nonMafia.length > 0) {
+                    const target = nonMafia[Math.floor(Math.random() * nonMafia.length)];
+                    return `I don't trust ${target.name}. They were acting suspicious.`;
+                }
+                return "I'm watching everyone carefully.";
+            }
+            case ROLES.INVESTIGATOR: {
+                const knownMafia = aiKnowledge[aiPlayer.id].investigated.find(i => i.isMafia && players[i.id].isAlive);
+                if (knownMafia) {
+                    return `I have concrete evidence! ${players[knownMafia.id].name} is a member of the Mafia! We must vote them out today.`;
+                }
+                const knownCitizen = aiKnowledge[aiPlayer.id].investigated.find(i => !i.isMafia && players[i.id].isAlive);
+                if (knownCitizen) {
+                    return `My investigations show that ${players[knownCitizen.id].name} is innocent. We can trust them.`;
+                }
+                return "I'm still gathering evidence. Be careful who you trust.";
+            }
+            case ROLES.DOCTOR:
+                if (dayNumber > 1 && nightActions.mafiaKill === nightActions.doctorSave) {
+                    return "I had a busy night. I think I managed to save someone from a terrible fate.";
+                }
+                return "We need to think logically. Who benefits the most from the person who died last night?";
+            case ROLES.CITIZEN:
+                const lastKilled = players[nightActions.mafiaKill];
+                if (dayNumber > 1 && lastKilled && lastKilled.isAlive === false) {
+                     return `Why would they kill ${lastKilled.name}? What did they know?`;
+                }
+                if (livingOthers.length > 0) {
+                    const suspect = livingOthers[Math.floor(Math.random() * livingOthers.length)];
+                    return `I've got a bad feeling about ${suspect.name}. Just an intuition.`;
+                }
+                return "This is stressful. I don't know who to believe.";
+        }
+        return null;
+    }
+
+    function enableVoting() {
+        playerGrid.querySelectorAll('.player-card').forEach(card => {
+            const player = players[card.dataset.id];
+            if (player.isAlive) {
+                card.classList.add('selectable');
+                card.onclick = () => {
+                    if (players[humanPlayerId].isAlive) {
+                        castVote(humanPlayerId, player.id);
+                    }
+                };
+            }
+        });
+    }
+    
+    function disableVoting() {
+        playerGrid.querySelectorAll('.player-card.selectable').forEach(card => {
+            card.classList.remove('selectable');
+            card.onclick = null;
+        });
+    }
+
+    function castVote(voterId, targetId) {
+        disableVoting();
+        logMessage(`${players[voterId].name} votes for ${players[targetId].name}.`, 'vote');
+        players[targetId].votes++;
+        
+        const livingPlayers = players.filter(p => p.isAlive);
+        livingPlayers.forEach(p => {
+            if (!p.isHuman && p.id !== voterId) {
+                const aiTargetId = getAIVoteTarget(p, livingPlayers);
+                players[aiTargetId].votes++;
+                logMessage(`${p.name} votes for ${players[aiTargetId].name}.`, 'vote');
+            }
+        });
+        
+        renderPlayers();
+        setTimeout(resolveLynch, 2000);
+    }
+
+    function getAIVoteTarget(aiPlayer, livingPlayers) {
+        const potentialTargets = livingPlayers.filter(p => p.id !== aiPlayer.id);
+        
+        if (aiPlayer.role === ROLES.MAFIA) {
+            const nonMafiaTargets = potentialTargets.filter(p => p.role !== ROLES.MAFIA);
+            if (nonMafiaTargets.length > 0) return nonMafiaTargets[Math.floor(Math.random() * nonMafiaTargets.length)].id;
+        }
+        
+        if (aiPlayer.role === ROLES.INVESTIGATOR) {
+            const knownMafia = aiKnowledge[aiPlayer.id].investigated.find(i => i.isMafia && players[i.id].isAlive);
+            if (knownMafia) return knownMafia.id;
+        }
+
+        return potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id;
+    }
+
+    function resolveLynch() {
+        let maxVotes = 0; // Start at 0 to handle no votes
+        let playersToLynch = [];
+        players.filter(p => p.isAlive).forEach(p => {
+            if (p.votes > maxVotes) {
+                maxVotes = p.votes;
+                playersToLynch = [p.id];
+            } else if (p.votes === maxVotes && maxVotes > 0) {
+                playersToLynch.push(p.id);
+            }
+        });
+
+        if (playersToLynch.length === 1) {
+            const lynchedPlayer = players[playersToLynch[0]];
+            lynchedPlayer.isAlive = false;
+            logMessage(`The town has decided to lynch ${lynchedPlayer.name}.`, 'event');
+            logMessage(`${lynchedPlayer.name} was a ${lynchedPlayer.role}.`, 'event');
+        } else {
+            logMessage('The vote was inconclusive. No one was lynched.', 'event');
+        }
+        
+        renderPlayers();
+        if (checkWinCondition()) return;
+        
+        dayNumber++;
+        setTimeout(startNightPhase, 3000);
+    }
+
+    async function startNightPhase() {
+        currentPhase = 'night';
+        gamePhase.textContent = `Night ${dayNumber}`;
+        logMessage(`--- Night ${dayNumber} ---`, 'phase');
+        logMessage('The town sleeps...', 'info');
+        
+        nightActions = { mafiaKill: null, doctorSave: null, investigatorCheck: null };
+        
+        await doMafiaAction();
+        await doDoctorAction();
+        await doInvestigatorAction();
+
+        setTimeout(startDayPhase, 1000);
+    }
+
+    function doMafiaAction() {
+        return new Promise(resolve => {
+            const mafiaPlayers = players.filter(p => p.role === ROLES.MAFIA && p.isAlive);
+            if (mafiaPlayers.length === 0) return resolve();
+            
+            const humanIsMafia = mafiaPlayers.some(p => p.isHuman);
+            
+            if (humanIsMafia) {
+                showModal('Mafia, Choose a Target', 'Select a player to eliminate.', players.filter(p => p.isAlive && p.role !== ROLES.MAFIA), (targetId) => {
+                    nightActions.mafiaKill = targetId;
+                    logMessage('You have chosen your target.', 'private');
+                    resolve();
+                });
+            } else {
+                const targets = players.filter(p => p.isAlive && p.role !== ROLES.MAFIA);
+                if (targets.length > 0) {
+                    nightActions.mafiaKill = targets[Math.floor(Math.random() * targets.length)].id;
+                }
+                setTimeout(resolve, 1500);
+            }
+        });
+    }
+
+    function doDoctorAction() {
+        return new Promise(resolve => {
+            const doctor = players.find(p => p.role === ROLES.DOCTOR && p.isAlive);
+            if (!doctor) return resolve();
+
+            if (doctor.isHuman) {
+                showModal('Doctor, Choose Who to Save', 'Select a player to protect tonight.', players.filter(p => p.isAlive), (targetId) => {
+                    nightActions.doctorSave = targetId;
+                    logMessage('You have chosen who to protect.', 'private');
+                    resolve();
+                });
+            } else {
+                const targets = players.filter(p => p.isAlive);
+                nightActions.doctorSave = targets[Math.floor(Math.random() * targets.length)].id;
+                setTimeout(resolve, 1500);
+            }
+        });
+    }
+
+    function doInvestigatorAction() {
+        return new Promise(resolve => {
+            const investigator = players.find(p => p.role === ROLES.INVESTIGATOR && p.isAlive);
+            if (!investigator) return resolve();
+
+            if (investigator.isHuman) {
+                 showModal('Investigator, Choose Who to Check', 'Select a player to investigate.', players.filter(p => p.isAlive && p.id !== investigator.id), (targetId) => {
+                    const targetPlayer = players[targetId];
+                    const result = targetPlayer.role === ROLES.MAFIA ? 'is Mafia' : 'is not Mafia';
+                    logMessage(`Your investigation reveals that ${targetPlayer.name} ${result}.`, 'private');
+                    resolve();
+                });
+            } else {
+                const targets = players.filter(p => p.isAlive && p.id !== investigator.id && !aiKnowledge[investigator.id].investigated.some(inv => inv.id === p.id));
+                if (targets.length > 0) {
+                    const target = targets[Math.floor(Math.random() * targets.length)];
+                    aiKnowledge[investigator.id].investigated.push({ id: target.id, isMafia: target.role === ROLES.MAFIA });
+                }
+                setTimeout(resolve, 1500);
+            }
+        });
+    }
+
+    function checkWinCondition() {
+        const livingPlayers = players.filter(p => p.isAlive);
+        const livingMafia = livingPlayers.filter(p => p.role === ROLES.MAFIA);
+        const livingTown = livingPlayers.filter(p => p.role !== ROLES.MAFIA);
+
+        if (livingMafia.length === 0) {
+            endGame('Town Wins!', 'All Mafia have been eliminated.');
+            return true;
+        }
+        if (livingMafia.length >= livingTown.length) {
+            endGame('Mafia Wins!', 'The Mafia have taken over the town.');
+            return true;
+        }
+        return false;
+    }
+    
+    function endGame(title, message) {
+        disableVoting();
+        gamePhase.textContent = 'Game Over';
+        logMessage(`--- GAME OVER ---`, 'phase');
+        logMessage(title, 'system');
+        
+        showModal(title, message, [], null, [{ text: 'Play Again', callback: () => window.location.reload() }]);
+    }
+
+    // --- UTILITY FUNCTIONS ---
+
+    function logMessage(message, type) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('log-message');
+        let icon = '';
+        switch(type) {
+            case 'system': icon = '⚙️'; msgDiv.classList.add('text-yellow-400'); break;
+            case 'event': icon = '💥'; msgDiv.classList.add('text-red-400', 'font-semibold'); break;
+            case 'vote': icon = '🗳️'; msgDiv.classList.add('text-blue-300'); break;
+            case 'info': icon = 'ℹ️'; msgDiv.classList.add('text-gray-300'); break;
+            case 'private': icon = '🤫'; msgDiv.classList.add('text-purple-400', 'italic'); break;
+            case 'phase': icon = '🌗'; msgDiv.classList.add('text-green-300', 'font-bold', 'mt-2', 'pt-2', 'border-t', 'border-gray-600'); break;
+        }
+        msgDiv.innerHTML = `${icon} ${message}`;
+        gameLog.appendChild(msgDiv);
+        gameLog.scrollTop = gameLog.scrollHeight;
+    }
+    
+    function logDiscussionMessage(playerName, message) {
+        const bubble = document.createElement('div');
+        bubble.className = 'discussion-bubble bg-gray-600/70 p-2 rounded-lg';
+        bubble.innerHTML = `<span class="font-bold text-purple-300">${playerName}:</span> ${message}`;
+        discussionLog.appendChild(bubble);
+        discussionLog.scrollTop = discussionLog.scrollHeight;
+    }
+
+    function showModal(title, text, targets, onSelect, customButtons = []) {
+        modalTitle.textContent = title;
+        modalText.textContent = text;
+        modalButtons.innerHTML = '';
+
+        if (targets.length > 0) {
+            targets.forEach(target => {
+                const button = document.createElement('button');
+                button.className = 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition';
+                button.textContent = target.name;
+                button.onclick = () => {
+                    hideModal();
+                    onSelect(target.id);
+                };
+                modalButtons.appendChild(button);
+            });
+        }
+        
+        if (customButtons.length > 0) {
+            customButtons.forEach(customBtn => {
+                const button = document.createElement('button');
+                button.className = 'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition';
+                button.textContent = customBtn.text;
+                button.onclick = () => {
+                    hideModal();
+                    customBtn.callback();
+                };
+                modalButtons.appendChild(button);
+            });
+        }
+
+        modalBackdrop.classList.remove('hidden');
+        setTimeout(() => {
+            modalBackdrop.classList.remove('opacity-0');
+            modalContent.classList.remove('scale-95', 'opacity-0');
+        }, 10);
+    }
+    
+    function hideModal() {
+        modalBackdrop.classList.add('opacity-0');
+        modalContent.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+            modalBackdrop.classList.add('hidden');
+        }, 300);
+    }
+
+    // --- EVENT LISTENERS ---
+    startGameBtn.addEventListener('click', initGame);
+
+</script>
+</body>
+</html>
+
